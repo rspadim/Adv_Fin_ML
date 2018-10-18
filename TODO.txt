@@ -1,0 +1,5 @@
+TODO list is:
+
+1) check all typos
+2) replace to python 3 code (it's python 2 base i think cause i checked some print funcitons without () and some xrange )
+3) i think there's some libs not created in meanwhile, like CLA.py HRP and others, maybe implementing this should be nice
