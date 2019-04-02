@@ -242,5 +242,5 @@ if __name__=='__main__':
     )
     bars = pd.DataFrame(bars, columns=bars_columns)
     print("Bars shape:", bars.shape)
-    bars.to_pickle("../data/MGLU3_201602010800_201904011014." + bar_type + "." + str(bar_volume) + ".pickle")
+    bars.to_pickle("../data/201602010800_201904011014." + bar_type + "." + str(bar_volume) + ".pickle")
     pass
