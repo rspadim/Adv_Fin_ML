@@ -7,22 +7,24 @@ from tqdm import tqdm, tqdm_notebook
 def create_up_down_sell_buy(data, col_price='<LAST>', col_bid='<BID>', col_ask='<ASK>', col_vol='<VOLUME>', col_up_down='up_down', col_buy_sell='buy_sell'):
     data[col_up_down] = np.NaN
     data[col_buy_sell] = np.NaN
-    data_trade = data[data[col_vol] > 0]
-    data_trade.loc[(data_trade[col_price] >= data_trade[col_ask]) & (data_trade[col_ask] != 0) & (data_trade[col_bid] < data_trade[col_ask]), col_buy_sell] = 1
-    data_trade.loc[(data_trade[col_price] <= data_trade[col_bid]) & (data_trade[col_bid] != 0) & (data_trade[col_bid] < data_trade[col_ask]), col_buy_sell] = -1
-    data_trade.loc[data_trade[col_price] > data_trade[col_price].shift(1), col_up_down] = 1
-    data_trade.loc[data_trade[col_price] < data_trade[col_price].shift(1), col_up_down] = -1
-    data_trade[col_buy_sell].fillna(method='ffill', inplace=True)
-    data_trade[col_buy_sell].fillna(0, inplace=True)
-    data_trade[col_up_down].fillna(method='ffill', inplace=True)
-    data_trade[col_up_down].fillna(0, inplace=True)
+    trades = data[col_vol] > 0
+    data.loc[trades, col_buy_sell] = 0
+    data.loc[trades & (data[trades][col_price] > data[trades][col_price].shift(1)), col_up_down] = 1
+    data.loc[trades & (data[trades][col_price] < data[trades][col_price].shift(1)), col_up_down] = -1
+    data[col_up_down].fillna(method='ffill', inplace=True)
+    data[col_up_down].fillna(0, inplace=True)
+    data.loc[trades & (data[col_price] >= data[col_ask]) & (data[col_ask] != 0) & (data[col_bid] < data[col_ask]), col_buy_sell] = 1
+    data.loc[trades & (data[col_price] <= data[col_bid]) & (data[col_bid] != 0) & (data[col_bid] < data[col_ask]), col_buy_sell] = -1
+    data.loc[data[col_buy_sell] == 0, col_buy_sell] = data[data[col_buy_sell] == 0][col_up_down]
+    data.loc[~trades, col_up_down] = np.nan
+    data.loc[~trades, col_buy_sell] = np.nan
 
 
 
 #@numba.jit()
 def create_bars(data, bar_type='volume', bar_volume=1000, col_time='date_time_ts', col_price='<LAST>', col_volume='<VOLUME>', col_index='#', cur_bar=False):
     bars = []
-    if(cur_bar == False):
+    if(cur_bar is False):
         cur_bar_start_ts = None
         cur_bar_end_ts = None
         cur_bar_start_index = 0
@@ -113,8 +115,8 @@ def create_bars(data, bar_type='volume', bar_volume=1000, col_time='date_time_ts
                     cur_bar_low = cur_bar_low if cur_bar_low < price else price
                     break
         return bars, [
-            'start_ts','end_ts','start_index','end_index',
-            'open','high','low','close','volume','dollar','ticks'
+            'start_ts', 'end_ts', 'start_index', 'end_index',
+            'open', 'high', 'low', 'close', 'volume', 'dollar', 'ticks'
         ]
 
     for i in tqdm(range(data.shape[0])):
@@ -202,11 +204,12 @@ def create_bars(data, bar_type='volume', bar_volume=1000, col_time='date_time_ts
             cur_bar_ticks
         ])
     return bars, [
-        'start_ts','end_ts','start_index','end_index',
-        'open','high','low','close','volume','dollar','ticks'
+        'start_ts', 'end_ts', 'start_index', 'end_index',
+        'open', 'high', 'low', 'close', 'volume', 'dollar', 'ticks'
     ]
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     if True:
         data = pd.read_csv('../data/201602010800_201904011014.csv.zip', compression='zip', sep='\t')
         for i in ['<ASK>', '<BID>', '<LAST>']:
@@ -215,17 +218,27 @@ if __name__=='__main__':
             data[i].fillna(0, inplace=True)
     #    data['<BID>'].fillna(method='backfill', inplace=True)
     #    data['<LAST>'].fillna(method='backfill', inplace=True)
+
         data['<VOLUME>'].fillna(0, inplace=True)
-        data['<DATE>'] = data['<DATE>'].str.replace('.','-')
+        data['<DATE>'] = data['<DATE>'].str.replace('.', '-')
         data['date_time'] = data['<DATE>'] + " " + data['<TIME>']
         data['date_time_ts'] = pd.to_datetime(data['date_time'], format='%Y-%m-%d %H:%M:%S.%f')
+
+        # split 1/8
+        data.loc[data['date_time'] < '2017-09-05 00:00:00.000', '<LAST>'] = data[data['date_time'] < '2017-09-05 00:00:00.000']['<LAST>'] / 8
+        data.loc[data['date_time'] < '2017-09-05 00:00:00.000', '<BID>'] = data[data['date_time'] < '2017-09-05 00:00:00.000']['<BID>'] / 8
+        data.loc[data['date_time'] < '2017-09-05 00:00:00.000', '<ASK>'] = data[data['date_time'] < '2017-09-05 00:00:00.000']['<ASK>'] / 8
+        data.loc[data['date_time'] < '2017-09-05 00:00:00.000', '<VOLUME>'] = data[data['date_time'] < '2017-09-05 00:00:00.000']['<VOLUME>'] * 8
+
         data['#'] = data.index.values
         data['buy_sell'] = 0
         data['up_down'] = 0
-        df_trades = data[(data['<LAST>'] != 0 & data['<LAST>'].notna()) & (data['<VOLUME>'] != 0 & data['<VOLUME>'].notna())]
+        df_trades = data[(data['<LAST>'] != 0 & data['<LAST>'].notnull()) & (data['<VOLUME>'] != 0 & data['<VOLUME>'].notnull())]
         create_up_down_sell_buy(data, col_price='<LAST>', col_bid='<BID>', col_ask='<ASK>', col_up_down='up_down', col_buy_sell='buy_sell')
+        print("Saving to pickle")
         data.to_pickle("../data/201602010800_201904011014.pickle")
     else:
+        print("Reading pickle")
         data = pd.read_pickle('../data/201602010800_201904011014.pickle')
         df_trades = data[(data['<LAST>'] != 0 & data['<LAST>'].notna()) & (data['<VOLUME>'] != 0 & data['<VOLUME>'].notna())]
 
